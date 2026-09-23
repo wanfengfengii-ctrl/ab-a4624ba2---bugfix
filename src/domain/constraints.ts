@@ -1,4 +1,5 @@
 import type { CarrierMargin, Violation } from './types';
+import { im3Product, productDistance } from './exactMath';
 
 export interface SelectedCarrier {
   id: string;
@@ -12,6 +13,10 @@ export interface SelectedCarrier {
  * 约束二：对任意不同载波 i、j，三阶互调产物 2*fi - fj 与任意第三载波
  *        （k 不同于 i、j）的距离必须 >= guard。
  *        i、j 顺序不同产物不同（2fi-fj 与 2fj-fi），两种方向都检查。
+ *
+ * 互调产物可能略超出安全整数范围（频点本身均为安全整数），产物与距离
+ * 一律按 BigInt 精确整数比较，避免 IEEE-754 舍入把“恰好等于保护间隔”
+ * 的合法组合误判为碰撞。
  */
 export function findViolations(selected: SelectedCarrier[], guard: number): Violation[] {
   const violations: Violation[] = [];
@@ -43,12 +48,12 @@ export function findViolations(selected: SelectedCarrier[], guard: number): Viol
       if (i === j) continue;
       const I = selected[i];
       const J = selected[j];
-      const product = 2 * I.freq - J.freq;
+      const product = im3Product(I.freq, J.freq);
       for (let k = 0; k < n; k++) {
         if (k === i || k === j) continue;
         const K = selected[k];
-        const distance = Math.abs(product - K.freq);
-        if (distance < guard) {
+        const distance = productDistance(product, K.freq);
+        if (distance < BigInt(guard)) {
           violations.push({
             kind: 'im3',
             i: I.id,
@@ -87,28 +92,30 @@ export function checkIncremental(
     if (Math.abs(old.freq - newOne.freq) < guard) return false;
   }
 
+  const bigGuard = BigInt(guard);
+
   // 新载波作为 i（含 j 为旧载波、k 为旧载波；以及 j 为旧载波、k 新自身不可能）
   for (const J of existing) {
-    const p1 = 2 * newOne.freq - J.freq;
+    const p1 = im3Product(newOne.freq, J.freq);
     for (const K of existing) {
       if (K.id === J.id) continue;
-      if (Math.abs(p1 - K.freq) < guard) return false;
+      if (productDistance(p1, K.freq) < bigGuard) return false;
     }
   }
   // 新载波作为 j
   for (const I of existing) {
-    const p2 = 2 * I.freq - newOne.freq;
+    const p2 = im3Product(I.freq, newOne.freq);
     for (const K of existing) {
       if (K.id === I.id) continue;
-      if (Math.abs(p2 - K.freq) < guard) return false;
+      if (productDistance(p2, K.freq) < bigGuard) return false;
     }
   }
   // 新载波作为 k：i、j 必须互不相同
   for (let a = 0; a < existing.length; a++) {
     for (let b = 0; b < existing.length; b++) {
       if (a === b) continue;
-      const product = 2 * existing[a].freq - existing[b].freq;
-      if (Math.abs(product - newOne.freq) < guard) return false;
+      const product = im3Product(existing[a].freq, existing[b].freq);
+      if (productDistance(product, newOne.freq) < bigGuard) return false;
     }
   }
 
@@ -118,6 +125,7 @@ export function checkIncremental(
 /** 为每个已选载波计算最近威胁与最小冲突裕量（核对展示用） */
 export function computeMargins(selected: SelectedCarrier[], guard: number): CarrierMargin[] {
   const n = selected.length;
+  const bigGuard = BigInt(guard);
   return selected.map((S, idxS) => {
     let spacingNearest: CarrierMargin['spacingNearest'] = null;
     for (let b = 0; b < n; b++) {
@@ -141,14 +149,14 @@ export function computeMargins(selected: SelectedCarrier[], guard: number): Carr
       if (i === idxS) continue;
       for (let j = 0; j < n; j++) {
         if (j === idxS || j === i) continue;
-        const product = 2 * selected[i].freq - selected[j].freq;
-        const distance = Math.abs(product - S.freq);
+        const product = im3Product(selected[i].freq, selected[j].freq);
+        const distance = productDistance(product, S.freq);
         const candidate = {
           i: selected[i].id,
           j: selected[j].id,
           product,
           distance,
-          margin: distance - guard,
+          margin: distance - bigGuard,
         };
         if (!im3Nearest || candidate.distance < im3Nearest.distance) {
           im3Nearest = candidate;
@@ -156,11 +164,14 @@ export function computeMargins(selected: SelectedCarrier[], guard: number): Carr
       }
     }
 
-    const margins: number[] = [];
-    if (spacingNearest) margins.push(spacingNearest.margin);
+    // 两类裕量统一为精确整数比较（间隔距离是安全整数，转 BigInt 无损）
+    const margins: bigint[] = [];
+    if (spacingNearest) margins.push(BigInt(spacingNearest.margin));
     if (im3Nearest) margins.push(im3Nearest.margin);
     // 模型要求至少 3 个载波；单载波时无威胁，裕量视为无限
-    const worstMargin = margins.length ? Math.min(...margins) : Number.POSITIVE_INFINITY;
+    const worstMargin = margins.length
+      ? margins.reduce((acc, m) => (m < acc ? m : acc))
+      : Number.POSITIVE_INFINITY;
 
     return {
       carrierId: S.id,

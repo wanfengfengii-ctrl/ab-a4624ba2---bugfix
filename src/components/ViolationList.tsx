@@ -17,10 +17,10 @@ export function ViolationList({ violations }: { violations: Violation[] }) {
           <li key={idx} className="violation im3">
             <span className="tag tag-im3">三阶互调</span>
             三元组 i=<b>{v.i}</b>（{v.fi}）、j=<b>{v.j}</b>（{v.fj}）、k=<b>{v.k}</b>（{v.fk}）：
-            2×{v.fi}−{v.fj} = <b className="num">{v.product}</b> kHz，
+            2×{v.fi}−{v.fj} = <b className="num">{v.product.toString()}</b> kHz，
             落入载波 {v.k} 保护区，距其频点实际仅{' '}
-            <b className="num bad">{v.distance}</b> kHz（保护间隔 {v.guard} kHz，不足{' '}
-            {v.guard - v.distance} kHz）
+            <b className="num bad">{v.distance.toString()}</b> kHz（保护间隔 {v.guard} kHz，不足{' '}
+            {(BigInt(v.guard) - v.distance).toString()} kHz）
           </li>
         ),
       )}

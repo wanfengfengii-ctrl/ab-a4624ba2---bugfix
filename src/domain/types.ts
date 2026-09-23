@@ -57,10 +57,15 @@ export type Violation =
       fi: number;
       fj: number;
       fk: number;
-      /** 互调产物频率 2fi-fj，kHz */
-      product: number;
-      /** 产物与第三载波的实际频率距离 |2fi-fj-fk|，kHz */
-      distance: number;
+      /**
+       * 互调产物频率 2fi-fj，kHz。
+       * 产物可能略超出安全整数范围，故以 BigInt 精确表示。
+       */
+      product: bigint;
+      /**
+       * 产物与第三载波的实际频率距离 |2fi-fj-fk|，kHz（精确非负整数）。
+       */
+      distance: bigint;
       guard: number;
     };
 
@@ -80,12 +85,18 @@ export interface CarrierMargin {
   im3Nearest: {
     i: string;
     j: string;
-    product: number;
-    distance: number;
-    margin: number;
+    /** 互调产物 2fi-fj，可能略超安全整数范围，以 BigInt 精确表示 */
+    product: bigint;
+    /** 实际频率距离（精确非负整数 kHz） */
+    distance: bigint;
+    /** 距离减去保护间隔（精确整数 kHz） */
+    margin: bigint;
   } | null;
-  /** 两类威胁中的最小裕量 */
-  worstMargin: number;
+  /**
+   * 两类威胁中的最小裕量（精确整数 kHz；无其他载波时为 +∞）。
+   * 非负即满足约束，0n 表示恰好贴着保护边界。
+   */
+  worstMargin: number | bigint;
 }
 
 /** 单载波核对项 */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkIncremental, computeMargins, findViolations } from './constraints';
+import { im3Product, productDistance } from './exactMath';
 import { solve } from './solver';
 import type { PlanModel } from './types';
 import { compareCarrierId } from './types';
@@ -43,8 +44,8 @@ describe('findViolations - 三阶互调 2fi-fj', () => {
     expect(im3.length).toBeGreaterThan(0);
     const hit = im3.find((v) => v.i === 'A' && v.j === 'B' && v.k === 'C');
     expect(hit).toBeDefined();
-    expect(hit && 'product' in hit && hit.product).toBe(1050);
-    expect(hit && 'distance' in hit && hit.distance).toBe(5);
+    expect(hit && 'product' in hit && hit.product).toBe(1050n);
+    expect(hit && 'distance' in hit && hit.distance).toBe(5n);
   });
 
   it('区分 i/j 方向：2fi-fj 与 2fj-fi 都检查', () => {
@@ -106,7 +107,158 @@ describe('computeMargins', () => {
     expect(a.spacingNearest?.distance).toBe(60);
     expect(a.spacingNearest?.margin).toBe(10);
     // 2B-? 互调：2*1060-1200=920 (距 A 80); 2*1200-1060=1340; 2*1000-1060=940 ...
-    expect(a.worstMargin).toBe(10);
+    expect(a.worstMargin).toBe(10n);
+  });
+});
+
+describe('exactMath - 安全整数上限附近的精确互调运算', () => {
+  const N = 9007199254740991; // Number.MAX_SAFE_INTEGER = 2^53 - 1
+
+  it('产物超出安全整数范围时 BigInt 仍精确，number 会舍入', () => {
+    // number 路径：精确产物 N+2 被舍入到偶数格点 2^53=N+1，与 C=N 的距离误算为 1
+    const floatProduct = 2 * (N - 2) - (N - 6);
+    expect(floatProduct).toBe(9007199254740992); // = N+1，精确值 N+2 已不可表示
+    expect(Math.abs(floatProduct - N)).toBe(1);
+    // BigInt 路径：产物 N+2 精确，与 C 的距离恰为 2
+    const exact = im3Product(N - 2, N - 6);
+    expect(exact).toBe(BigInt(N) + 2n);
+    expect(productDistance(exact, N)).toBe(2n);
+  });
+
+  it('普通频点的精确运算结果与整数算术一致', () => {
+    expect(im3Product(1000, 950)).toBe(1050n);
+    expect(productDistance(1050n, 1055)).toBe(5n);
+    expect(productDistance(im3Product(900, 1000), 700)).toBe(100n);
+  });
+});
+
+describe('安全整数上限高频模型（验收场景）', () => {
+  const N = 9007199254740991; // 2^53 - 1，合法安全整数频点上限
+  const GUARD = 2;
+
+  // A=N-2、B=N-6、C=N：
+  //  - 载波间隔：|A-B|=4、|A-C|=2、|B-C|=6，均 >= 2
+  //  - A、B 的互调产物 2A-B = N+2（超安全整数上限），与 C 距离恰为 2
+  //  - B、A 的产物 2B-A = N-10，与 C 距离 10；其余三元组距离同样 >= 2
+  // 首选费用均为 0，另一候选费用均为 100，全局最优必须是零费用首选组合。
+  const model: PlanModel = {
+    guardBand: GUARD,
+    carriers: [
+      {
+        id: 'A',
+        preferredFreq: N - 2,
+        candidates: [
+          { no: 1, freq: N - 2, cost: 0 },
+          { no: 2, freq: 1000, cost: 100 },
+        ],
+      },
+      {
+        id: 'B',
+        preferredFreq: N - 6,
+        candidates: [
+          { no: 1, freq: N - 6, cost: 0 },
+          { no: 2, freq: 2000, cost: 100 },
+        ],
+      },
+      {
+        id: 'C',
+        preferredFreq: N,
+        candidates: [
+          { no: 1, freq: N, cost: 0 },
+          { no: 2, freq: 3000, cost: 100 },
+        ],
+      },
+    ],
+  };
+
+  it('首选组合的首选频点均为安全整数', () => {
+    for (const c of model.carriers) {
+      expect(Number.isSafeInteger(c.preferredFreq)).toBe(true);
+    }
+  });
+
+  it('互调产物 N+2 超安全整数范围、与 C 距离恰为保护间隔，判定为零碰撞', () => {
+    const sel = [
+      { id: 'A', freq: N - 2 },
+      { id: 'B', freq: N - 6 },
+      { id: 'C', freq: N },
+    ];
+    const violations = findViolations(sel, GUARD);
+    expect(violations).toHaveLength(0);
+    expect(checkIncremental(sel.slice(0, 2), sel[2], GUARD)).toBe(true);
+
+    // 核对精确产物与“恰好等于保护间隔”的边界距离
+    const hitProduct = im3Product(N - 2, N - 6);
+    expect(hitProduct).toBe(BigInt(N) + 2n);
+    expect(hitProduct).toBeGreaterThan(BigInt(Number.MAX_SAFE_INTEGER));
+    expect(productDistance(hitProduct, N)).toBe(BigInt(GUARD));
+  });
+
+  it('求解返回 A=N-2、B=N-6、C=N，总费用 0、偏移 0', () => {
+    const r = solve(model);
+    expect(r.status).toBe('feasible');
+    expect(r.totalCost).toBe(0);
+    expect(r.maxDeviation).toBe(0);
+    expect(r.frequencySequence.map((s) => ({ carrierId: s.carrierId, freq: s.freq }))).toEqual([
+      { carrierId: 'A', freq: N - 2 },
+      { carrierId: 'B', freq: N - 6 },
+      { carrierId: 'C', freq: N },
+    ]);
+  });
+
+  it('返回序列的互调裕量精确为 0（贴边界合法），且结果可结构化序列化', () => {
+    const r = solve(model);
+    for (const d of r.selections) {
+      const wm = d.margin.worstMargin;
+      if (typeof wm === 'bigint') expect(wm >= 0n).toBe(true);
+      else expect(wm).toBe(Number.POSITIVE_INFINITY);
+    }
+    // Worker 通道依赖结构化克隆：BigInt 可被克隆，往返后结论不变
+    const cloned = structuredClone(r);
+    expect(cloned.totalCost).toBe(0);
+    expect(cloned.frequencySequence.map((s: { freq: number }) => s.freq)).toEqual([
+      N - 2,
+      N - 6,
+      N,
+    ]);
+  });
+
+  it('边界两侧语义不变：距离 G-1=1 仍判碰撞，距离 G+1=3 合法', () => {
+    // 频点写成 M+a/M+b/M+c 时，互调 2fi-fj 与第三载波的距离恰为
+    // |2a-b-c|（平移抵消）。据此构造只有一个互调方向贴边界的组合。
+
+    // 合法侧：A=M(N-5)、B=M-2(N-7)、C=M+5(N)
+    //  2A-B = N-3，与 C 距离 3 >= 2；载波间距 2/5/7 均合法；其余互调距离 9/12
+    expect(
+      findViolations(
+        [
+          { id: 'A', freq: N - 5 },
+          { id: 'B', freq: N - 7 },
+          { id: 'C', freq: N },
+        ],
+        GUARD,
+      ),
+    ).toHaveLength(0);
+
+    // 碰撞侧：A=N-2、B=N-5、C=N
+    //  2A-B = N+1（超出安全整数范围的奇数，number 无法精确表示），与 C 距离 1 < 2
+    //  载波间距 3/2/5 均合法；其余互调距离 7/8，仅此一处互调碰撞
+    const violation = findViolations(
+      [
+        { id: 'A', freq: N - 2 },
+        { id: 'B', freq: N - 5 },
+        { id: 'C', freq: N },
+      ],
+      GUARD,
+    );
+    expect(violation.filter((v) => v.kind === 'spacing')).toHaveLength(0);
+    const im3 = violation.filter((v) => v.kind === 'im3');
+    const hit = im3.find((v) => v.i === 'A' && v.j === 'B' && v.k === 'C');
+    expect(hit).toBeDefined();
+    expect(hit!.product).toBe(BigInt(N) + 1n);
+    expect(hit!.distance).toBe(1n);
+    // 反向三元组 (A,C,B) 的产物 N-4 与 B 距离同样为 1，一并被精确报出
+    expect(im3.find((v) => v.i === 'A' && v.j === 'C' && v.k === 'B')?.distance).toBe(1n);
   });
 });
 
@@ -369,8 +521,12 @@ describe('solve - 与暴力枚举随机对照（完备性）', () => {
         // 可行解本身必须零碰撞
         const sel = r.frequencySequence.map((s) => ({ id: s.carrierId, freq: s.freq }));
         expect(findViolations(sel, guard)).toHaveLength(0);
-        // 每项裕量非负
-        for (const d of r.selections) expect(d.margin.worstMargin).toBeGreaterThanOrEqual(0);
+        // 每项裕量非负（worstMargin 为精确整数 bigint 或无威胁时的 +∞）
+        for (const d of r.selections) {
+          const wm = d.margin.worstMargin;
+          if (typeof wm === 'bigint') expect(wm >= 0n).toBe(true);
+          else expect(wm).toBe(Number.POSITIVE_INFINITY);
+        }
         // 注：分支限界会剪去不可能更优的分支，故不要求访问全部可行叶
       }
     });

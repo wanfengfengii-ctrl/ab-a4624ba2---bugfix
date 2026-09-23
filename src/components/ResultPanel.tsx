@@ -6,9 +6,9 @@ interface Props {
   guardBand: number;
 }
 
-function fmtMargin(m: number): { text: string; tone: 'ok' | 'warn' | 'inf' } {
-  if (!Number.isFinite(m)) return { text: '—（无其他载波）', tone: 'inf' };
-  if (m === 0) return { text: `${m} kHz（恰好满足）`, tone: 'warn' };
+function fmtMargin(m: number | bigint): { text: string; tone: 'ok' | 'warn' | 'inf' } {
+  if (typeof m === 'number' && !Number.isFinite(m)) return { text: '—（无其他载波）', tone: 'inf' };
+  if (m === 0 || m === 0n) return { text: `${m} kHz（恰好满足）`, tone: 'warn' };
   return { text: `${m} kHz`, tone: 'ok' };
 }
 
@@ -102,8 +102,8 @@ export function ResultPanel({ result, guardBand }: Props) {
                 <td>
                   {im ? (
                     <>
-                      2×{im.i}−{im.j} = <b className="num">{im.product}</b>；距离{' '}
-                      <b className="num">{im.distance}</b>／裕量 <b className="num">{im.margin}</b> kHz
+                      2×{im.i}−{im.j} = <b className="num">{im.product.toString()}</b>；距离{' '}
+                      <b className="num">{im.distance.toString()}</b>／裕量 <b className="num">{im.margin.toString()}</b> kHz
                     </>
                   ) : (
                     '—'
