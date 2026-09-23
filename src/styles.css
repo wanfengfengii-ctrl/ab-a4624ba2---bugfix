@@ -1,0 +1,411 @@
+:root {
+  --bg: #0f1720;
+  --panel: #ffffff;
+  --ink: #1c2733;
+  --muted: #5d6b7a;
+  --line: #d7dee6;
+  --brand: #1f6fb2;
+  --brand-dark: #16527f;
+  --bad: #c0392b;
+  --bad-bg: #fdecea;
+  --warn: #9a6b00;
+  --warn-bg: #fff6e0;
+  --ok: #1e7d44;
+  --ok-bg: #e8f6ee;
+  --info-bg: #eaf3fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #eef2f6;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px 24px 48px;
+}
+
+.app-header h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  color: var(--brand-dark);
+}
+
+.subtitle {
+  margin: 0 0 18px;
+  color: var(--muted);
+  max-width: 1000px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(15, 23, 32, 0.06);
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--brand-dark);
+}
+
+.panel h3 {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+/* ---------- 编辑器 ---------- */
+.guard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+input[type='number'],
+input[type='text'],
+input:not([type]) {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  width: 110px;
+  font-family: inherit;
+}
+
+input:focus {
+  outline: 2px solid rgba(31, 111, 178, 0.25);
+  border-color: var(--brand);
+}
+
+.input-bad {
+  border-color: var(--bad) !important;
+  background: var(--bad-bg);
+}
+
+.carriers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 12px;
+}
+
+.carrier {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+  background: #fbfcfe;
+}
+
+.carrier[data-invalid='true'] {
+  border-color: rgba(192, 57, 43, 0.55);
+}
+
+.carrier legend {
+  font-weight: 600;
+  padding: 0 6px;
+  color: var(--brand-dark);
+}
+
+.carrier-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.carrier-head label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--muted);
+  gap: 3px;
+}
+
+.cand-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.cand-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 2px 4px;
+}
+
+.cand-table td {
+  padding: 3px 4px;
+}
+
+.cand-table input {
+  width: 100%;
+  min-width: 70px;
+}
+
+.cand-table tr[data-invalid='true'] input {
+  border-color: var(--bad);
+}
+
+.field-error {
+  color: var(--bad);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.field-error-sub {
+  padding-left: 4px;
+}
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #f3f6f9;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+button:hover:not(:disabled) {
+  background: #e6ecf2;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-dark);
+}
+
+.btn-danger {
+  border-color: #e3b3ad;
+  color: var(--bad);
+  background: #fdf1ef;
+}
+
+.btn-small {
+  padding: 3px 8px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.btn-link {
+  border: none;
+  background: none;
+  color: var(--brand);
+  text-decoration: underline;
+  padding: 2px 6px;
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sample-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+}
+
+/* ---------- 计算面板 ---------- */
+.compute-panel {
+  position: sticky;
+  top: 12px;
+}
+
+.banner {
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.banner-bad {
+  background: var(--bad-bg);
+  border: 1px solid #eeb4ad;
+  color: #7a2018;
+}
+
+.banner-info {
+  background: var(--info-bg);
+  border: 1px solid #bcd8ef;
+  color: #144a73;
+}
+
+.banner-idle {
+  background: #f4f7fa;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+
+.plain-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+/* ---------- 结果 ---------- */
+.result {
+  margin-top: 16px;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #fbfcfe;
+}
+
+.card-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--brand-dark);
+}
+
+.card-value.seq {
+  font-size: 16px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.result-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+  margin-top: 6px;
+}
+
+.result-table th,
+.result-table td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.result-table th {
+  background: #f3f6f9;
+  color: #33455a;
+}
+
+.num {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  text-align: right;
+  white-space: nowrap;
+}
+
+td.num {
+  text-align: right;
+}
+
+.bad {
+  color: var(--bad);
+}
+
+.tone-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.tone-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.tone-inf {
+  color: var(--muted);
+}
+
+/* ---------- 碰撞清单 ---------- */
+.violation-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.violation {
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid #eeb4ad;
+  background: var(--bad-bg);
+  color: #6f1d16;
+  font-size: 13px;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 7px;
+  margin-right: 8px;
+  color: #fff;
+}
+
+.tag-spacing {
+  background: #b0532f;
+}
+
+.tag-im3 {
+  background: var(--bad);
+}
