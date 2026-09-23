@@ -160,6 +160,18 @@ function lexicographic(a: number[], b: number[]): number {
   return 0;
 }
 
+/** 简易确定性 PRNG */
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 describe('solve - 基础优化', () => {
   it('无冲突时选择每载波最便宜候选（首选频点费用为 0）', () => {
     // 1000/1100/1300：间距足够，且任意 2fi-fj 都不落在第三载波附近
@@ -320,19 +332,102 @@ describe('solve - 基础优化', () => {
   });
 });
 
-describe('solve - 与暴力枚举随机对照（完备性）', () => {
-  // 简易确定性 PRNG
-  function mulberry32(seed: number) {
-    let a = seed >>> 0;
-    return () => {
-      a |= 0;
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
+describe('solve - 安全整数边界的高频频点（精确整数语义）', () => {
+  // Number.MAX_SAFE_INTEGER = 2^53 - 1：频点本身合法，但 2*fi 已超出双精度精确范围
+  const N = Number.MAX_SAFE_INTEGER; // 9007199254740991
 
+  it('互调产物越出安全整数范围时，距离恰等于保护间隔仍合法（不错误舍弃）', () => {
+    // 2*(N-2) - (N-6) = N+2，与 C=N 的距离恰为 2 = 保护间隔
+    const sel = [
+      { id: 'A', freq: N - 2 },
+      { id: 'B', freq: N - 6 },
+      { id: 'C', freq: N },
+    ];
+    expect(findViolations(sel, 2)).toHaveLength(0);
+    // 增量检查与全量检查结论一致
+    expect(checkIncremental(sel.slice(0, 2), sel[2], 2)).toBe(true);
+  });
+
+  it('互调距离比保护间隔小 1 kHz 时判定碰撞并给出精确产物与距离', () => {
+    // 2*(N-2) - (N-5) = N+1，与 C=N 的距离为 1 < 2
+    const sel = [
+      { id: 'A', freq: N - 2 },
+      { id: 'B', freq: N - 5 },
+      { id: 'C', freq: N },
+    ];
+    const im3 = findViolations(sel, 2).filter((v) => v.kind === 'im3');
+    const hit = im3.find((v) => v.i === 'A' && v.j === 'B' && v.k === 'C');
+    expect(hit).toBeDefined();
+    // N+1 超出安全整数范围，以精确十进制字符串呈现
+    expect(hit && 'product' in hit && hit.product).toBe('9007199254740992');
+    expect(hit && 'distance' in hit && hit.distance).toBe(1);
+  });
+
+  it('裕量核对：越界互调产物以精确值呈现，贴边裕量为 0', () => {
+    const sel = [
+      { id: 'A', freq: N - 2 },
+      { id: 'B', freq: N - 6 },
+      { id: 'C', freq: N },
+    ];
+    const margins = computeMargins(sel, 2);
+    const c = margins.find((m) => m.carrierId === 'C')!;
+    // 最近互调威胁：2A-B = N+2 = 9007199254740993，距离恰为 2
+    expect(c.im3Nearest?.product).toBe('9007199254740993');
+    expect(c.im3Nearest?.distance).toBe(2);
+    expect(c.im3Nearest?.margin).toBe(0);
+    expect(c.worstMargin).toBe(0);
+  });
+
+  it('高频模型：费用为 0 的首选组合是最优解且不被误舍弃', () => {
+    // 验收模型：A、B 首选组合的三阶互调产物 N+2 与 C 首选频点距离恰为保护间隔
+    const model: PlanModel = {
+      guardBand: 2,
+      carriers: [
+        {
+          id: 'A',
+          preferredFreq: N - 2,
+          candidates: [
+            { no: 1, freq: N - 2, cost: 0 },
+            { no: 2, freq: N - 100, cost: 100 },
+          ],
+        },
+        {
+          id: 'B',
+          preferredFreq: N - 6,
+          candidates: [
+            { no: 1, freq: N - 6, cost: 0 },
+            { no: 2, freq: N - 200, cost: 100 },
+          ],
+        },
+        {
+          id: 'C',
+          preferredFreq: N,
+          candidates: [
+            { no: 1, freq: N, cost: 0 },
+            { no: 2, freq: N - 300, cost: 100 },
+          ],
+        },
+      ],
+    };
+    const r = solve(model);
+    expect(r.status).toBe('feasible');
+    expect(r.totalCost).toBe(0);
+    expect(r.maxDeviation).toBe(0);
+    expect(r.frequencySequence).toEqual([
+      { carrierId: 'A', freq: N - 2 },
+      { carrierId: 'B', freq: N - 6 },
+      { carrierId: 'C', freq: N },
+    ]);
+    // 返回解自身零碰撞，且 C 的最近互调威胁为精确产物 N+2、距离恰为 2
+    const sel = r.frequencySequence.map((s) => ({ id: s.carrierId, freq: s.freq }));
+    expect(findViolations(sel, 2)).toHaveLength(0);
+    const c = r.selections.find((s) => s.carrierId === 'C')!;
+    expect(c.margin.im3Nearest?.product).toBe('9007199254740993');
+    expect(c.margin.im3Nearest?.distance).toBe(2);
+  });
+});
+
+describe('solve - 与暴力枚举随机对照（完备性）', () => {
   for (let seed = 1; seed <= 300; seed++) {
     const rand = mulberry32(seed);
     const n = 3 + Math.floor(rand() * 4); // 3~6 个载波
@@ -372,6 +467,51 @@ describe('solve - 与暴力枚举随机对照（完备性）', () => {
         // 每项裕量非负
         for (const d of r.selections) expect(d.margin.worstMargin).toBeGreaterThanOrEqual(0);
         // 注：分支限界会剪去不可能更优的分支，故不要求访问全部可行叶
+      }
+    });
+  }
+});
+
+describe('solve - 安全整数边界高频模型与暴力枚举对照', () => {
+  const N = Number.MAX_SAFE_INTEGER;
+  for (let seed = 1; seed <= 40; seed++) {
+    const rand = mulberry32(seed + 1_000_000);
+    const n = 3 + Math.floor(rand() * 4); // 3~6 个载波
+    const guard = 2 * (1 + Math.floor(rand() * 3)); // 2/4/6
+    const carriers = Array.from({ length: n }, (_, ci) => {
+      const nc = 2 + Math.floor(rand() * 3); // 2~4 候选
+      const freqs = new Set<number>();
+      while (freqs.size < nc) {
+        // 频点聚集在 N-78..N：频点本身是安全整数，但互调产物频繁越过安全边界
+        freqs.add(N - Math.floor(rand() * 40) * 2);
+      }
+      const freqArr = [...freqs];
+      const preferred = freqArr[Math.floor(rand() * freqArr.length)];
+      return {
+        id: `C${ci + 1}`,
+        preferredFreq: preferred,
+        candidates: freqArr.map((f, i) => ({ no: i + 1, freq: f, cost: Math.floor(rand() * 6) * 5 })),
+      };
+    });
+    const model: PlanModel = { guardBand: guard, carriers };
+
+    const r = solve(model);
+    const ref = bruteForce(model);
+
+    it(`seed=${seed} n=${n} guard=${guard}`, () => {
+      expect(r.totalCombinations).toBe(ref.total);
+      if (ref.best === null) {
+        expect(r.status).toBe('infeasible');
+      } else {
+        expect(r.status).toBe('feasible');
+        expect(r.totalCost).toBe(ref.best.cost);
+        expect(r.maxDeviation).toBe(ref.best.maxDev);
+        expect(r.frequencySequence.map((s) => s.freq)).toEqual(ref.best.freqs);
+        // 可行解本身必须零碰撞（精确整数判定）
+        const sel = r.frequencySequence.map((s) => ({ id: s.carrierId, freq: s.freq }));
+        expect(findViolations(sel, guard)).toHaveLength(0);
+        // 每项裕量非负（越界时以精确字符串承载，统一转 BigInt 比较）
+        for (const d of r.selections) expect(BigInt(d.margin.worstMargin) >= 0n).toBe(true);
       }
     });
   }

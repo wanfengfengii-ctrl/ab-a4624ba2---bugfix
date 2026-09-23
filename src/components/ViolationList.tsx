@@ -20,7 +20,7 @@ export function ViolationList({ violations }: { violations: Violation[] }) {
             2×{v.fi}−{v.fj} = <b className="num">{v.product}</b> kHz，
             落入载波 {v.k} 保护区，距其频点实际仅{' '}
             <b className="num bad">{v.distance}</b> kHz（保护间隔 {v.guard} kHz，不足{' '}
-            {v.guard - v.distance} kHz）
+            {v.guard - Number(v.distance)} kHz）
           </li>
         ),
       )}

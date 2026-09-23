@@ -34,6 +34,13 @@ export interface Assignment {
   pick: number[];
 }
 
+/**
+ * 精确整数的展示形式：安全整数范围内为 number；三阶互调产物 2fi−fj 等
+ * 中间结果可能超出 Number.MAX_SAFE_INTEGER，此时为精确十进制字符串，
+ * 避免双精度浮点在边界上丢失精度。
+ */
+export type ExactInt = number | string;
+
 /** 两类碰撞：载波对间隔不足 / 三阶互调产物 2fi-fj 落入第三载波保护区 */
 export type Violation =
   | {
@@ -42,7 +49,7 @@ export type Violation =
       carrierB: string;
       freqA: number;
       freqB: number;
-      /** 实际频率距离 |fA-fB|，kHz */
+      /** 实际频率距离 |fA-fB|，kHz（两安全整数之差，必为安全整数） */
       distance: number;
       guard: number;
     }
@@ -57,10 +64,10 @@ export type Violation =
       fi: number;
       fj: number;
       fk: number;
-      /** 互调产物频率 2fi-fj，kHz */
-      product: number;
-      /** 产物与第三载波的实际频率距离 |2fi-fj-fk|，kHz */
-      distance: number;
+      /** 互调产物频率 2fi-fj，kHz（精确值，可能超出安全整数范围） */
+      product: ExactInt;
+      /** 产物与第三载波的实际频率距离 |2fi-fj-fk|，kHz（精确值） */
+      distance: ExactInt;
       guard: number;
     };
 
@@ -80,12 +87,15 @@ export interface CarrierMargin {
   im3Nearest: {
     i: string;
     j: string;
-    product: number;
-    distance: number;
-    margin: number;
+    /** 互调产物 2fi−fj（精确值，可能超出安全整数范围） */
+    product: ExactInt;
+    /** 产物与本载波的实际距离（精确值） */
+    distance: ExactInt;
+    /** 距离减去保护间隔；越大越安全，负数表示碰撞 */
+    margin: ExactInt;
   } | null;
-  /** 两类威胁中的最小裕量 */
-  worstMargin: number;
+  /** 两类威胁中的最小裕量（精确值） */
+  worstMargin: ExactInt;
 }
 
 /** 单载波核对项 */

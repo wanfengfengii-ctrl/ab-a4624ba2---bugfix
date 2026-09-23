@@ -1,4 +1,4 @@
-import type { SolveResult } from '../domain/types';
+import type { ExactInt, SolveResult } from '../domain/types';
 import { ViolationList } from './ViolationList';
 
 interface Props {
@@ -6,7 +6,9 @@ interface Props {
   guardBand: number;
 }
 
-function fmtMargin(m: number): { text: string; tone: 'ok' | 'warn' | 'inf' } {
+function fmtMargin(m: ExactInt): { text: string; tone: 'ok' | 'warn' | 'inf' } {
+  // 超出安全整数范围的精确值以字符串承载；能越界的只有巨大正距离，裕量必为正
+  if (typeof m === 'string') return { text: `${m} kHz`, tone: 'ok' };
   if (!Number.isFinite(m)) return { text: '—（无其他载波）', tone: 'inf' };
   if (m === 0) return { text: `${m} kHz（恰好满足）`, tone: 'warn' };
   return { text: `${m} kHz`, tone: 'ok' };
